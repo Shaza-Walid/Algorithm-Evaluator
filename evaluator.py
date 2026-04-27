@@ -1,5 +1,7 @@
 import time
 import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg') # added this to avoid errors in GUI
 import numpy as np
 
 # This function tries to estimate the Big-O complexity based on how execution time grows as input size increases.
@@ -108,7 +110,29 @@ def evaluate_algorithm(user_code, mode="auto", manual_arr=None):
         # If function crashes during execution
         return "Runtime Error: {}".format(e)
 
+    # clear previous plots to avoid errors
+    plt.clf()
 
+    # ---------------------------------------------------------
+    # Visualization: EMBEDDED PLOTTING
+    # We create a Figure object to return it to the GUI because we want the figure to be displayed inside the app, not in a separate window
+    # ---------------------------------------------------------
+    fig, ax = plt.subplots(figsize=(5, 4), tight_layout=True)
+    
+    # Plot data on ax
+    ax.loglog(sizes, times, marker='o', color='#3B8ED0', linewidth=2)
+    
+    ax.set_xlabel("Input Size (n) [Log Scale]")
+    ax.set_ylabel("Execution Time (seconds) [Log Scale]")
+    ax.set_title("Algorithm Performance Analysis")
+    ax.grid(True, which="both", ls="-", alpha=0.3)
+
+    # Estimate complexity based on collected data
+    complexity = estimate_big_o(sizes, times)
+
+    return fig, "Estimated Complexity: " + complexity
+
+'''
     # Visualization: plot time vs input size
     plt.plot(sizes, times, marker='o')
     plt.xlabel("Input Size (n)")
@@ -122,7 +146,7 @@ def evaluate_algorithm(user_code, mode="auto", manual_arr=None):
 
     # Return final result to user
     return "Estimated Complexity: " + complexity
-
+'''
 
 
 '''

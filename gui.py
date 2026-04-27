@@ -1,113 +1,160 @@
-# We import tkinter library
-# tkinter is used to create GUI (Graphical User Interface) apps in Python
-import tkinter as tk
-
-# We import our own function from evaluator.py
-# This function is responsible for analyzing the algorithm (the cote logic)
+# This library (customtkinter)is more modern than tkinter for design
+import customtkinter as ctk
 from evaluator import evaluate_algorithm
+# Added these to embed the plot inside the GUI instead of a separate window
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
+import sys
 
+# The general theme "dark mode with blue text"
+ctk.set_appearance_mode("dark") 
+ctk.set_default_color_theme("blue")
 
-# This is the main function that runs the whole application
+# This function runs the whole application
 def run_app():
-
-    # Create the main window (the app screen)
-    root = tk.Tk()
-
-    # Set the title of the window (what appears at the top)
+    root = ctk.CTk()
     root.title("Algorithm Performance Evaluator")
+    root.geometry("1200x700") # Made wider for the split screen
 
-    # Set the size of the window (width x height)
-    root.geometry("800x600")
+    # Split the screen into two columns (50/50 split)
+    root.grid_columnconfigure(0, weight=1) # Left half
+    root.grid_columnconfigure(1, weight=1) # Right half
+    root.grid_rowconfigure(0, weight=1)
 
+    # --- LEFT HALF: INPUT & CONTROLS ---
+    left_side = ctk.CTkFrame(root, fg_color="transparent")
+    left_side.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
 
-    # ---------------- TITLE LABEL ----------------
-    # This creates a text label (just text on screen)
-    # font=("Arial", 16) means font type Arial and size 16
-    tk.Label(root, text="Algorithm Evaluator", font=("Arial", 16)).pack(pady=10)
+    # Define some fonts 
+    # title font: bold and large
+    title_font = ctk.CTkFont(family="Segoe UI", size=28, weight="bold")
+    # text font: medium size
+    text_font = ctk.CTkFont(family="Segoe UI", size=14)
+    # code font: better for readability
+    code_font = ctk.CTkFont(family="Consolas", size=15)
 
+    # main title 
+    title_label = ctk.CTkLabel(left_side, text="Algorithm Evaluator", font=title_font, text_color="#3B8ED0")
+    # space around the title 
+    title_label.pack(pady=25)
 
-    # ---------------- CODE INPUT AREA ----------------
-    # This label tells the user what to do
-    tk.Label(root, text="Enter your algorithm:").pack()
+    # main input area
+    input_frame = ctk.CTkFrame(left_side, fg_color="transparent")
+    # space around input area
+    input_frame.pack(pady=10, padx=10, fill="both", expand=True)
+    
+    # instructions for user 
+    ctk.CTkLabel(input_frame, text="Write your Python function here:", font=text_font).pack(anchor="w", padx=10)
+    
+    # code input box
+    code_input = ctk.CTkTextbox(
+        input_frame, 
+        height=250, 
+        font=code_font, 
+        border_width=2,
+        border_color="#3B8ED0",
+        fg_color="#1E1E1E" 
+    )
+    code_input.pack(pady=10, fill="both", expand=True)
 
-    # This is a big text box where user writes their algorithm code
-    # height = number of lines visible
-    # width = size of box
-    code_input = tk.Text(root, height=10, width=80)
-    code_input.pack()
+    # control panel for mode selection 
+    control_panel = ctk.CTkFrame(left_side)
+    control_panel.pack(pady=15, padx=10, fill="x")
+    # store selected mode
+    mode_var = ctk.StringVar(value="auto")
+    
+    # mode selection 
+    radio_frame = ctk.CTkFrame(control_panel, fg_color="transparent")
+    radio_frame.pack(side="left", padx=20, pady=10)
+    # radio buttons 
+    ctk.CTkRadioButton(radio_frame, text="Auto Mode", variable=mode_var, value="auto", font=text_font).pack(pady=5, anchor="w")
+    ctk.CTkRadioButton(radio_frame, text="Manual Mode:", variable=mode_var, value="manual", font=text_font).pack(pady=5, anchor="w")
 
+    # manual input area
+    manual_frame = ctk.CTkFrame(control_panel, fg_color="transparent")
+    manual_frame.pack(side="right", padx=10, fill="x", expand=True)
+    # entry for manual
+    manual_entry = ctk.CTkEntry(manual_frame, font=text_font, placeholder_text="Manual array: Numbers only...", height=30)
+    manual_entry.pack(pady=(35,5), fill="x")
 
-    # ---------------- MODE SELECTION ----------------
-    # StringVar is a special variable that stores text in tkinter
-    # default value is "auto"
-    mode = tk.StringVar(value="auto")
+    # result display area
+    result_font = ctk.CTkFont(family="Segoe UI", size=18, weight="bold")
+    result_label = ctk.CTkLabel(left_side, text="Result will appear here", font=result_font, text_color="#555555")
+    result_label.pack(pady=20)
 
-    # Radio buttons = user can select ONLY ONE option
+    # --- RIGHT HALF: PLOTTING AREA ---
+    right_side = ctk.CTkFrame(root)
+    right_side.grid(row=0, column=1, sticky="nsew", padx=20, pady=20)
+    
+    ctk.CTkLabel(right_side, text="Performance Graph", font=title_font, text_color= "#3B8ED0").pack(pady=20)
+    
+    # Container that will hold the graph inside the right half
+    plot_container = ctk.CTkFrame(right_side, fg_color="#1E1E1E")
+    plot_container.pack(fill="both", expand=True, padx=10, pady=10)
 
-    # Auto mode button (automatic input)
-    tk.Radiobutton(root, text="Auto Mode", variable=mode, value="auto").pack()
+    # Global canvas variable to keep track of the drawing
+    current_canvas = None
 
-    # Manual mode button (user enters array manually)
-    tk.Radiobutton(root, text="Manual Mode", variable=mode, value="manual").pack()
-
-
-    # ---------------- MANUAL INPUT ----------------
-    # Label for manual array input
-    tk.Label(root, text="Manual Array (comma separated):").pack()
-
-    # Entry = small input box (single line)
-    manual_entry = tk.Entry(root, width=50)
-    manual_entry.pack()
-
-
-    # ---------------- RESULT DISPLAY ----------------
-    # This label will show results after analysis
-    result_label = tk.Label(root, text="Result will appear here", fg="blue")
-    result_label.pack(pady=10)
-
-
-    # ---------------- FUNCTION THAT RUNS ANALYSIS ----------------
+    # run
     def run_analysis():
-
-        # Get code written by user from text box
-        # "1.0" means start line 1, character 0
-        # tk.END means until the end of text
-        user_code = code_input.get("1.0", tk.END)
-
-
-        # Check which mode is selected
-        if mode.get() == "manual":
-
-            # If manual mode → read array from input box
+        nonlocal current_canvas
+        user_code = code_input.get("1.0", "end")
+        
+        arr = None
+        if mode_var.get() == "manual":
             try:
-                # split(",") means split text by commas
-                # map(int, ...) converts each item into integer
                 arr = list(map(int, manual_entry.get().split(",")))
-
             except:
-                # If user input is wrong, show error message
-                result_label.config(text="Invalid manual input")
+                result_label.configure(text="Error: Invalid input", text_color="#E74C3C")
                 return
 
+        # 1. Properly clear the old canvas if it exists
+        if current_canvas:
+            current_canvas.get_tk_widget().destroy()
+            current_canvas = None
+        
+        # 2. Clear matplotlib memory
+        plt.close('all') 
+
+        # evaluate the code and get result
+        # evaluate_algorithm now returns (figure, text)
+        result = evaluate_algorithm(user_code, mode_var.get(), arr)
+        
+        if isinstance(result, tuple):
+            fig, complexity_text = result
+            result_label.configure(text=f"{complexity_text}", text_color="#2ECC71")
+            
+            # 3. Create and embed new canvas
+            current_canvas = FigureCanvasTkAgg(fig, master=plot_container)
+            canvas_widget = current_canvas.get_tk_widget()
+            canvas_widget.pack(fill="both", expand=True)
+            current_canvas.draw()
         else:
-            # If auto mode → we don't use manual array
-            arr = None
+            # Show error message if evaluation failed
+            result_label.configure(text=f"{result}", text_color="#E74C3C")
 
+    # run button
+    run_button = ctk.CTkButton(
+        left_side, 
+        text="RUN ANALYSIS", 
+        command=run_analysis, 
+        font=ctk.CTkFont(family="Segoe UI", size=16, weight="bold"),
+        height=45,
+        corner_radius=10,
+        hover_color="#1F538D"
+    )
+    run_button.pack(pady=10)
 
-        # Call evaluator function (core logic of project)
-        # It returns result (like Big-O estimation)
-        result = evaluate_algorithm(user_code, mode.get(), arr)
+    # Clean cleanup on exit to prevent "invalid command" errors
+    def on_closing():
+        plt.close('all')
+        root.quit()
+        # Using try-except to swallow the 'after' script errors on exit
+        try:
+            root.destroy()
+        except:
+            pass
+        sys.exit(0)
 
-        # Show result on screen
-        result_label.config(text=result)
-
-
-    # ---------------- BUTTON ----------------
-    # Button to start analysis
-    # command=run_analysis means when button clicked → run function
-    tk.Button(root, text="Run Analysis", command=run_analysis).pack(pady=10)
-
-
-    # Keep the window running (VERY IMPORTANT)
-    # Without this → window will open and close immediately
+    root.protocol("WM_DELETE_WINDOW", on_closing)
     root.mainloop()
