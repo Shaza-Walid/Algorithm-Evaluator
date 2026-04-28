@@ -1,1 +1,4 @@
 matplotlib
+customtkinter
+numpy
+scipy
