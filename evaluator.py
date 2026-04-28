@@ -2,7 +2,7 @@ import time
 import random
 import math
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use('Agg')  # non-interactive backend — no display window needed
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import curve_fit
@@ -14,27 +14,35 @@ from scipy.stats import pearsonr
 # =============================================================
 
 def model_O1(n, a):
+    # Flat line — time never changes no matter how big n gets
     return a * np.ones_like(n, dtype=float)
 
 def model_Ologn(n, a):
+    # Grows slowly — doubling n barely adds any time
     return a * np.log2(n + 1)
 
 def model_On(n, a):
+    # Straight line — double n, double the time
     return a * n
 
 def model_Onlogn(n, a):
+    # Slightly curved — typical of good sorting algorithms like merge sort
     return a * n * np.log2(n + 1)
 
 def model_On2(n, a):
+    # Parabola — double n, quadruple the time. Nested loops land here.
     return a * n ** 2
 
 def model_On2logn(n, a):
+    # Quadratic with a twist
     return a * (n ** 2) * np.log2(n + 1)
 
 def model_On3(n, a):
+     # Cubic — triple nested loops
     return a * n ** 3
 
 def model_O2n(n, a):
+    # Exponential — nightmare territory
     return a * 2.0 ** (n / 50.0)   # scaled to avoid overflow on large n
 
 # Registry: label → (function, display_name)
@@ -53,6 +61,8 @@ COMPLEXITY_MODELS = [
 # =============================================================
 # CURVE-FITTING BASED COMPLEXITY ESTIMATOR
 # Returns sorted list of (label, r_squared, description)
+# Core idea: try to fit the measured times against every model.
+# The model that "bends" the same way as the real data wins.
 # =============================================================
 
 def estimate_big_o(sizes, times):
@@ -180,6 +190,8 @@ def evaluate_algorithm(user_code, mode="auto", manual_arr=None):
 
     # ----------------------------------------------------------
     # MODE 1 — Manual
+    # User provides a single array; we time it once and show a bar chart.
+    # Can't estimate Big-O from one data point — we just report raw time.
     # ----------------------------------------------------------
     if mode == "manual":
         if manual_arr is None or len(manual_arr) == 0:
@@ -226,13 +238,13 @@ def evaluate_algorithm(user_code, mode="auto", manual_arr=None):
     except Exception as e:
         return "Runtime Error: {}".format(e)
 
-    # Fit curves on the average-case times (most representative)
+    
     candidates = estimate_big_o(SIZES, avg_times)   # sorted by R²
 
     top_label, top_r2, top_desc = candidates[0]
     confidence_pct = top_r2 * 100.0
 
-    # Per-scenario labels (best/worst may differ)
+    
     best_cands  = estimate_big_o(SIZES, best_times)
     worst_cands = estimate_big_o(SIZES, worst_times)
 
