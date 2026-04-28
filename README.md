@@ -107,11 +107,11 @@ def bubble_sort(arr):
 **Output:**
 
 ```
-Detected Complexity: O(n²) — Quadratic  (~98% fit)
+Detected Complexity: O(n² log n) — Quad-Linearithmic  (~100% fit)
 
-Best Case:    O(n)
-Average Case: O(n²)
-Worst Case:   O(n²)
+Best Case:    O(n² log n)
+Average Case: O(n² log n)
+Worst Case:   O(n² log n)
 ```
 
 A log-log performance graph will appear inside the app showing all three timing curves.
