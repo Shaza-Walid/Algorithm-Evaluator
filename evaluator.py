@@ -82,8 +82,16 @@ def estimate_big_o(sizes, times):
             # R² score — how well does the model fit?
             ss_res = np.sum((t - t_pred) ** 2)
             ss_tot = np.sum((t - np.mean(t)) ** 2)
-            r2 = 1.0 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
-            r2 = max(0.0, min(1.0, r2))   # clamp to [0, 1]
+            # r2 = 1.0 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
+            if ss_tot < 1e-12:
+                # If variance is almost zero → treat as perfect constant
+                if label == "O(1)":
+                    r2 = 1.0
+                else:
+                    r2 = 0.0
+            else:
+                r2 = 1.0 - (ss_res / ss_tot)
+                r2 = max(0.0, min(1.0, r2))   # clamp to [0, 1]
 
             results.append((label, r2, description))
         except Exception:
@@ -133,7 +141,79 @@ def _time_func(func, arr):
 
 
 # =============================================================
-# PLOT BUILDER
+# AUTO ANALYSIS HELPER  (NEW)
+# Runs best / avg / worst across all SIZES and returns raw times
+# =============================================================
+
+def run_auto_analysis(func):
+    """
+    Runs the function against best-case, average-case, and worst-case
+    inputs for every size in SIZES.
+    Returns three lists: best_times, avg_times, worst_times
+    """
+    best_times  = []
+    avg_times   = []
+    worst_times = []
+
+    for n in SIZES:
+        best_times.append(_time_func(func, make_best_case(n)))
+        avg_times.append(_time_func(func,  make_avg_case(n)))
+        worst_times.append(_time_func(func, make_worst_case(n)))
+
+    return best_times, avg_times, worst_times
+
+
+# =============================================================
+# MANUAL POINT CLASSIFIER  (NEW)
+# Interpolates the three curves at the manual input's size n
+# and decides which curve the measured time is closest to.
+# =============================================================
+
+def classify_manual_point(manual_time, n, best_times, avg_times, worst_times):
+    """
+    Given the measured execution time for a manual input of size n,
+    interpolate where n falls on each of the three benchmark curves
+    and return which case the manual input is closest to.
+
+    Returns a dict with:
+        closest     – "Best Case" | "Average Case" | "Worst Case"
+        manual_time – the measured time (seconds)
+        best_at_n   – interpolated best-case time at size n
+        avg_at_n    – interpolated average-case time at size n
+        worst_at_n  – interpolated worst-case time at size n
+        distances   – dict of absolute distances to each curve
+    """
+    sizes = np.array(SIZES, dtype=float)
+
+    # Interpolate the expected time at the manual input's size
+    best_at_n  = float(np.interp(n, sizes, best_times))
+    avg_at_n   = float(np.interp(n, sizes, avg_times))
+    worst_at_n = float(np.interp(n, sizes, worst_times))
+
+    dist_best  = abs(manual_time - best_at_n)
+    dist_avg   = abs(manual_time - avg_at_n)
+    dist_worst = abs(manual_time - worst_at_n)
+
+    distances = {
+        "Best Case":    dist_best,
+        "Average Case": dist_avg,
+        "Worst Case":   dist_worst,
+    }
+
+    closest = min(distances, key=lambda k: distances[k])
+
+    return {
+        "closest":     closest,
+        "manual_time": manual_time,
+        "best_at_n":   best_at_n,
+        "avg_at_n":    avg_at_n,
+        "worst_at_n":  worst_at_n,
+        "distances":   distances,
+    }
+
+
+# =============================================================
+# PLOT BUILDER  (original — used by auto mode)
 # =============================================================
 
 def _build_plot(sizes, best_times, avg_times, worst_times, top_label, confidence_pct):
@@ -156,6 +236,53 @@ def _build_plot(sizes, best_times, avg_times, worst_times, top_label, confidence
 
 
 # =============================================================
+# MANUAL PLOT BUILDER  (NEW)
+# Same three curves + a highlighted dot for the manual input
+# =============================================================
+
+def _build_manual_plot(sizes, best_times, avg_times, worst_times,
+                       manual_n, manual_time, closest_case):
+    """
+    Draws the three benchmark curves and overlays the manual input
+    as a large scatter point coloured to match its closest case.
+    A vertical dashed line marks the manual input's position on the x-axis.
+    """
+    COLOR_MAP = {
+        "Best Case":    "#2ECC71",
+        "Average Case": "#3B8ED0",
+        "Worst Case":   "#E74C3C",
+    }
+
+    plt.close('all')
+    fig, ax = plt.subplots(figsize=(6, 4), tight_layout=True)
+
+    # Three benchmark curves
+    ax.plot(sizes, best_times,  marker='o', color='#2ECC71', linewidth=2, label='Best Case')
+    ax.plot(sizes, avg_times,   marker='s', color='#3B8ED0', linewidth=2, label='Average Case')
+    ax.plot(sizes, worst_times, marker='^', color='#E74C3C', linewidth=2, label='Worst Case')
+
+    # Manual input point — coloured by its closest case
+    point_color = COLOR_MAP[closest_case]
+    ax.scatter([manual_n], [manual_time],
+               color=point_color, s=150, zorder=5,
+               edgecolors='white', linewidth=2,
+               label=f'Your Input (n={manual_n})')
+
+    # Vertical guide line at the manual input's size
+    ax.axvline(x=manual_n, color=point_color, linestyle='--', alpha=0.4)
+
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlabel("Input Size (n)  [log scale]")
+    ax.set_ylabel("Execution Time (s)  [log scale]")
+    ax.set_title(f"Manual Input → Closest to {closest_case}")
+    ax.legend(fontsize=9)
+    ax.grid(True, which="both", ls="--", alpha=0.3)
+
+    return fig
+
+
+# =============================================================
 # MAIN EVALUATION ENTRY POINT
 # Returns (fig, result_dict) on success, or a plain string on error
 #
@@ -167,6 +294,10 @@ def _build_plot(sizes, best_times, avg_times, worst_times, top_label, confidence
 #   "best_label"     – complexity for best-case input
 #   "avg_label"      – complexity for average-case input
 #   "worst_label"    – complexity for worst-case input
+#
+#   (manual mode only)
+#   "manual_time"    – measured time for the manual input
+#   "classification" – dict from classify_manual_point()
 # =============================================================
 
 def evaluate_algorithm(user_code, mode="auto", manual_arr=None):
@@ -189,42 +320,59 @@ def evaluate_algorithm(user_code, mode="auto", manual_arr=None):
         return "No function found in the submitted code."
 
     # ----------------------------------------------------------
-    # MODE 1 — Manual
-    # User provides a single array; we time it once and show a bar chart.
-    # Can't estimate Big-O from one data point — we just report raw time.
+    # MODE 1 — Manual  (updated)
+    # Runs Auto Analysis in the background to build the three curves,
+    # then times the manual input and classifies it against those curves.
     # ----------------------------------------------------------
     if mode == "manual":
         if manual_arr is None or len(manual_arr) == 0:
             return "Manual mode requires a non-empty array."
 
         try:
-            exec_time = _time_func(func, manual_arr)
+            # ① Time the user's own input
+            manual_time = _time_func(func, manual_arr)
+
+            # ② Run full Auto Analysis in the background to get the curves
+            best_times, avg_times, worst_times = run_auto_analysis(func)
+
+            # ③ Classify where the manual point sits on those curves
+            n = len(manual_arr)
+            classification = classify_manual_point(
+                manual_time, n, best_times, avg_times, worst_times
+            )
+
+            # ④ Big-O estimation (based on average-case curve)
+            candidates  = estimate_big_o(SIZES, avg_times)
+            best_cands  = estimate_big_o(SIZES, best_times)
+            worst_cands = estimate_big_o(SIZES, worst_times)
+
+            top_label, top_r2, top_desc = candidates[0]
+            confidence_pct = top_r2 * 100.0
+
+            # ⑤ Build plot with the manual point overlaid on the curves
+            fig = _build_manual_plot(
+                SIZES, best_times, avg_times, worst_times,
+                n, manual_time, classification["closest"]
+            )
+
+            result = {
+                "top_label":      top_label,
+                "top_desc":       top_desc,
+                "confidence":     confidence_pct,
+                "candidates":     [(lbl, r2 * 100.0) for lbl, r2, _ in candidates[:3]],
+                "best_label":     best_cands[0][0],
+                "avg_label":      top_label,
+                "worst_label":    worst_cands[0][0],
+                "manual_time":    manual_time,
+                "classification": classification,
+            }
+            return fig, result
+
         except Exception as e:
             return "Runtime Error: {}".format(e)
 
-        # Single data point — can't fit curves, just report time
-        plt.close('all')
-        fig, ax = plt.subplots(figsize=(6, 4), tight_layout=True)
-        ax.bar(["Your Input  (n={})".format(len(manual_arr))], [exec_time],
-               color='#3B8ED0', width=0.4)
-        ax.set_ylabel("Execution Time (seconds)")
-        ax.set_title("Manual Run Result")
-        ax.grid(True, axis='y', ls='--', alpha=0.3)
-
-        result = {
-            "top_label":  "N/A (single run)",
-            "top_desc":   "Need multiple sizes for Big-O estimation",
-            "confidence": 0.0,
-            "candidates": [],
-            "best_label":  "—",
-            "avg_label":   "—",
-            "worst_label": "—",
-            "manual_time": exec_time,
-        }
-        return fig, result
-
     # ----------------------------------------------------------
-    # MODE 2 — Auto  (best / avg / worst)
+    # MODE 2 — Auto  (best / avg / worst) 
     # ----------------------------------------------------------
     best_times  = []
     avg_times   = []
